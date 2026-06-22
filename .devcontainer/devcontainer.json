@@ -1,0 +1,31 @@
+{
+  "name": "ROS 2 Humble Workspace",
+  "build": {
+    "dockerfile": "Dockerfile"
+  },
+  
+  // Removes manual mounts so VS Code handles paths flawlessly automatically
+  "runArgs": [
+    "--network=host",
+    "--ipc=host",
+    "--gpus=all"
+  ],
+  
+  "containerEnv": {
+    "DISPLAY": "${localEnv:DISPLAY}",
+    "QT_X11_NO_MITSHM": "1"
+  },
+
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-vscode.cpptools",
+        "ms-iot.vscode-ros",
+        "ms-python.python",
+        "twxs.cmake"
+      ]
+    }
+  },
+  
+  "remoteUser": "root"
+}
