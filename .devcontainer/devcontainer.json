@@ -1,22 +1,21 @@
 {
   "name": "ROS 2 Humble Workspace",
-  "build": {
-    "dockerfile": "Dockerfile"
+  "build": {  
+    "dockerfile": "Dockerfile" // Search for the Dockerfile and build an image from it and start a container from that image
   },
   
-  // Removes manual mounts so VS Code handles paths flawlessly automatically
-  "runArgs": [
-    "--network=host",
-    "--ipc=host",
-    "--gpus=all"
+  "runArgs": [ // Arguments passed when the container starts
+    "--network=host", // Shares host's network stack 
+    "--ipc=host", // Inter process communication (eg: ROS2 and DDS), so host is good instead of having a unique ipc on container
+    "--gpus=all" // Gives access to nvidia GPUs 
   ],
   
-  "containerEnv": {
-    "DISPLAY": "${localEnv:DISPLAY}",
-    "QT_X11_NO_MITSHM": "1"
+  "containerEnv": { // Environment variables that are set inside the container
+    "DISPLAY": "${localEnv:DISPLAY}", // Copies host's display variable (for visualization like rviz and gazebo)
+    "QT_X11_NO_MITSHM": "1" // Fixes GUI issues for the display applications
   },
 
-  "customizations": {
+  "customizations": { // Automatically installed inside the container (VS Code extensions)
     "vscode": {
       "extensions": [
         "ms-vscode.cpptools",
@@ -27,5 +26,5 @@
     }
   },
   
-  "remoteUser": "root"
+  "remoteUser": "root" // root so that we don't need any permissions for installing or running commands
 }

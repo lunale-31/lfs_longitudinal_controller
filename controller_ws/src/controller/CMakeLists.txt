@@ -12,6 +12,7 @@ find_package(geometry_msgs REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(lfs_msgs REQUIRED)
 find_package(Eigen3 REQUIRED)
+find_package(track_srv REQUIRED)
 
 # uncomment the following section in order to fill in
 # further dependencies manually.
@@ -43,6 +44,7 @@ ament_target_dependencies(longitudinal_controller
   geometry_msgs
   std_msgs
   lfs_msgs
+  track_srv
 )
 
 # Install config and launch folder directory

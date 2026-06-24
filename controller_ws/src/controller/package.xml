@@ -16,6 +16,7 @@
   <depend>std_msgs</depend>
   <depend>lfs_msgs</depend>
   <depend>rclcpp</depend>
+  <depend>track_srv</depend>
 
   <export>
     <build_type>ament_cmake</build_type>
