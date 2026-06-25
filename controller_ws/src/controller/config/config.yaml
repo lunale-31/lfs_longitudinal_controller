@@ -1,0 +1,12 @@
+longitudinal_controller:
+  ros__parameters:
+    # PID Params
+    k: 0.08
+    ti: 0.5
+    td: 0.0
+    tr: 0.05
+    n: 10.0
+    beta: 1.0
+
+    # Sample time - Noted based on frequency of current_state topic 
+    dt: 0.005 

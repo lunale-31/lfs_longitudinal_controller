@@ -1,5 +1,8 @@
 #pragma once
 
+// Headers
+#include "PID.h"
+
 // Libraries required
 #include <Eigen/Dense>
 #include <rclcpp/rclcpp.hpp>
@@ -23,8 +26,8 @@ class Controller : public rclcpp::Node{
         Controller();
 
     private: 
-        // Load parameters
-        // void loadParams();
+        // Load parameters from the config yaml file 
+        void loadParams();
 
         // Service request function
         void trackServiceRequest(); 
@@ -42,4 +45,8 @@ class Controller : public rclcpp::Node{
         // Initialization of variables
         std::vector<geometry_msgs::msg::Point> latest_track_center; // service response is a vector of points, check return_track.cpp file for verifying. 
         bool has_received_track = false;
+
+        // PID and Params variables
+        PID pid_1; 
+        float kp, ti, td, tr, n, beta, dt;
 }; 

@@ -33,6 +33,7 @@ endif()
 add_executable(longitudinal_controller
   src/long_controller.cpp
   src/main.cpp
+  src/PID.cpp 
 )
 
 target_link_libraries(longitudinal_controller
@@ -49,11 +50,11 @@ ament_target_dependencies(longitudinal_controller
 
 # Install config and launch folder directory
 
-# install(DIRECTORY
-#   config
-#   launch
-#   DESTINATION share/${PROJECT_NAME}/
-# )
+install(DIRECTORY
+  config
+  launch
+  DESTINATION share/${PROJECT_NAME}/
+)
 
 # Executables 
 install(TARGETS 
