@@ -51,6 +51,7 @@ void Controller::trackServiceRequest(){
     auto request = std::make_shared<track_srv::srv::ReturnTrack::Request>();
 
     // Get the response using asychronous callback to prevent controller callback loop freeze. 
+    // [this] remembers the current Controller instance, called as capture clause. 
     track_client->async_send_request(request,
         [this](rclcpp::Client<track_srv::srv::ReturnTrack>::SharedFuture future) {
             auto response = future.get();

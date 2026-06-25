@@ -10,8 +10,8 @@ class PID{
         // PID controller update variables
         float m_v{}, m_u{}, m_p{}, m_i{}, m_d{}, ad{}, bd{}, err{}, prev_meas{}, prev_der{};
 
-        static constexpr float MAX_THROTTLE = 1.0; 
-        static constexpr float MIN_THROTTLE = -1.0; 
+        static constexpr float MAX_THROTTLE = 1.0; // compile-time const, so no warnings
+        static constexpr float MIN_THROTTLE = -1.0; // static = only 1 variable for every instances of the class
 
     public:
         // Constructor to initialize parameters    
