@@ -34,6 +34,7 @@ add_executable(longitudinal_controller
   src/long_controller.cpp
   src/main.cpp
   src/PID.cpp 
+  src/utils.cpp
 )
 
 target_link_libraries(longitudinal_controller

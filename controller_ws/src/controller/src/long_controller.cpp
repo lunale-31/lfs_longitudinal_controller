@@ -1,5 +1,6 @@
 #include "long_controller.h"
 #include "PID.h"
+#include "utils.h"
 
 Controller::Controller() : rclcpp::Node("longitudinal_controller"){
 
@@ -73,18 +74,14 @@ void Controller::controllerCallback(const lfs_msgs::msg::BikeState::SharedPtr ms
         return;
     }
 
-    // // Check for track center point service response 
-    // RCLCPP_INFO(this->get_logger(), "Received %zu track center points!", this->latest_track_center.size());
-
-    // if (!this->latest_track_center.empty()) {
-    //     RCLCPP_INFO(this->get_logger(), "First point -> X: %f, Y: %f, Z: %f", 
-    //                 this->latest_track_center[0].x, 
-    //                 this->latest_track_center[0].y, 
-    //                 this->latest_track_center[0].z);
-    // } else {
-    //     RCLCPP_WARN(this->get_logger(), "The received track points array is empty!");
-    // }
-    // RCLCPP_INFO(this->get_logger(), "Received Bike State! Current speed: %f", msg->x_dot);
+    /* msg->x_dot (to obtain states)
+    1) latest_track_center has the 98 track_center points as a vector from the service. (latest_track_center[0].x, y, z). 
+    2) Compute the track curvature (k).
+    3) Use the k to calculate maximum speed the car can safely drive around a corner (lateral accln is needed to stay on the curve, 
+    which is a centripetal accln) and driving on the straight line.
+    4) Modify the obtained profile due to k using accln and braking limits. 
+    5) Use this smooth profile to track using PID, which will generate throttle commands. 
+    */
 
     // PID Controller
     float current_speed = msg->x_dot;
