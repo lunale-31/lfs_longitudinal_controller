@@ -46,6 +46,12 @@ class Controller : public rclcpp::Node{
         std::vector<geometry_msgs::msg::Point> latest_track_center; // service response is a vector of points, check return_track.cpp file for verifying. 
         bool has_received_track = false;
 
+        // Velocity profile plots
+        std::vector<double> v_accln;
+        std::vector<double> v_brake;
+        std::vector<double> v_corner;
+        std::vector<double> v_profile;
+        
         // PID and Params variables
         PID pid_1; 
         float kp, ti, td, tr, n, beta, dt;

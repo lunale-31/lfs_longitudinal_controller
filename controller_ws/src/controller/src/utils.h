@@ -5,6 +5,7 @@
 #include <rclcpp/rclcpp.hpp>
 #include <iostream> 
 #include <cmath> 
+#include <fstream>
 
 // Messages required
 #include "geometry_msgs/msg/point.hpp"
@@ -46,7 +47,7 @@ namespace utils{
         double ax_max_brake;
 
         // MAX VELOCITY
-        double v_max = 50.0; 
+        double v_max = 32.16; 
 
         VehicleParams(){
             double F_drive = max_drive_torque / wheel_radius;
@@ -60,10 +61,19 @@ namespace utils{
     // Velocity profile calculation
     std::vector<double> computeCurvature(const std::vector<geometry_msgs::msg::Point>& latest_track_center, const VehicleParams& config_);
     std::vector<double> computeVelocity(const std::vector<double>& k, const VehicleParams& config_); 
-    
-    // Smooth Velocity profile
-    // std::vector<double> computeSmoothVel(const std::vector<geometry_msgs::msg::Point>& latest_track_center, const VehicleParams& config_);
+    std::vector<double> computeDeltaS(const std::vector<geometry_msgs::msg::Point>& latest_track_center);
 
+    // Smooth Velocity profile
+    std::vector<double> computeSmoothVel(const std::vector<geometry_msgs::msg::Point>& latest_track_center, const VehicleParams& config_,
+                                        std::vector<double>& v_corner, std::vector<double>& v_accln, std::vector<double>& v_brake);
+
+    // CSV save
+
+    void saveProfileToCSV(const std::vector<double>& v_profile, 
+                        const std::vector<double>& v_accln, 
+                        const std::vector<double>& v_brake, 
+                        const std::vector<double>& v_corner,
+                        const std::string& filename); 
     // Read-only 
     // void getK() const; 
     // void getVelProfile() const;

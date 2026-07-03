@@ -59,9 +59,21 @@ void Controller::trackServiceRequest(){
             
             // Handle the response data 
             this->latest_track_center = response->points; 
+            RCLCPP_INFO(this->get_logger(), "Successfully received track center points! Computing velocity profile...");
+
+            // Struct for params
+            utils::VehicleParams config; 
+
+            // Compute velocity profile
+            this->v_profile = utils::computeSmoothVel(this->latest_track_center, config, 
+                                           this->v_corner, this->v_accln, this->v_brake);
+
+            // Save the velocity profile data in csv 
+            utils::saveProfileToCSV(this->v_profile, this->v_accln, this->v_brake, this->v_corner, "v_profile.csv");
+
+            RCLCPP_INFO(this->get_logger(), "Velocity profile generated and exported to v_profile.csv successfully!");
+
             this->has_received_track = true;
-            
-            RCLCPP_INFO(this->get_logger(), "Successfully received track center point!");
         }); 
 
 }
