@@ -2,7 +2,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 
 # Load data
-df = pd.read_csv("v_profile.csv")
+df = pd.read_csv("velocity_profile.csv")
 
 plt.figure(figsize=(14, 7))
 

@@ -65,7 +65,7 @@ namespace utils{
 
     // Smooth Velocity profile
     std::vector<double> computeSmoothVel(const std::vector<geometry_msgs::msg::Point>& latest_track_center, const VehicleParams& config_,
-                                        std::vector<double>& v_corner, std::vector<double>& v_accln, std::vector<double>& v_brake);
+                                        double current_speed, std::vector<double>& v_corner, std::vector<double>& v_accln, std::vector<double>& v_brake);
 
     // CSV save
 

@@ -59,19 +59,17 @@ void Controller::trackServiceRequest(){
             
             // Handle the response data 
             this->latest_track_center = response->points; 
-            RCLCPP_INFO(this->get_logger(), "Successfully received track center points! Computing velocity profile...");
+            RCLCPP_INFO(this->get_logger(), "Track received. Controller ready for live profiling.");
+            
+            // Compute the static profile once, right after receiving the track
+            utils::VehicleParams config;
+            this->v_profile = utils::computeSmoothVel(this->latest_track_center, config, /*current_speed=*/0.0,
+                                                    this->v_corner, this->v_accln, this->v_brake);
 
-            // Struct for params
-            utils::VehicleParams config; 
+            utils::saveProfileToCSV(this->v_profile, this->v_accln, this->v_brake, this->v_corner,
+                                    "velocity_profile.csv");
 
-            // Compute velocity profile
-            this->v_profile = utils::computeSmoothVel(this->latest_track_center, config, 
-                                           this->v_corner, this->v_accln, this->v_brake);
-
-            // Save the velocity profile data in csv 
-            utils::saveProfileToCSV(this->v_profile, this->v_accln, this->v_brake, this->v_corner, "v_profile.csv");
-
-            RCLCPP_INFO(this->get_logger(), "Velocity profile generated and exported to v_profile.csv successfully!");
+            RCLCPP_INFO(this->get_logger(), "CSV Saved");
 
             this->has_received_track = true;
         }); 
@@ -95,13 +93,17 @@ void Controller::controllerCallback(const lfs_msgs::msg::BikeState::SharedPtr ms
     5) Use this smooth profile to track using PID, which will generate throttle commands. 
     */
 
+    double current_speed = static_cast<double>(msg->x_dot);
+
+    // setpoint setting 
+    double setpoint = 1.0;
+                
     // PID Controller
-    float current_speed = msg->x_dot;
-    float setpoint = 1.0;
     double u; 
 
     // Casting to double for PID calcs, the states are in float32 so. 
-    u = pid_1.calculateOutput(static_cast<double>(current_speed), static_cast<double>(setpoint)); 
+    // u = pid_1.calculateOutput(static_cast<double>(current_speed), static_cast<double>(setpoint)); 
+    u = pid_1.calculateOutput(current_speed, setpoint); 
 
     std_msgs::msg::Float64 throttle_msg; 
     throttle_msg.data = u; 
