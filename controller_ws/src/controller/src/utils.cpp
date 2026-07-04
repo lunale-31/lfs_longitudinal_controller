@@ -71,6 +71,7 @@ namespace utils{
                                         double current_speed, std::vector<double>& v_corner, std::vector<double>& v_accln, std::vector<double>& v_brake){
         size_t n = latest_track_center.size();
         
+        std::cout<<"Entered Compute smooth velocity"<<'\n'; 
         // get k 
         auto k = computeCurvature(latest_track_center, config_);  // size n, 98
 
@@ -81,17 +82,17 @@ namespace utils{
         auto s = computeDeltaS(latest_track_center); // size n 
 
         // Acceleration profile
-        v_accln.assign(n, 0.0);
-        //v_accln[0] = v_corner[0];
-        v_accln[0] = v_corner[0]; 
+        v_accln = v_corner; 
 
         for (int iter = 0; iter < 3; iter++) {
-            for (size_t i = 1; i < n; i++) {
-                double v_i = v_accln[i-1];
-                double ay_used = std::min(std::abs(k[i-1]) * v_i * v_i, config_.ay_max);
-                double pct = ay_used / config_.ay_max;
+            for (size_t i = 1; i < n; i++) { // i = 1
+                double v_i = v_accln[i-1]; // 0 
+                double ay_used = std::min(std::abs(k[i-1]) * v_i * v_i, config_.ay_max); // k[0] * v[0] * v[0], move from i-1 to i
+                double pct = ay_used / config_.ay_max; 
                 double ax_avail = config_.ax_max_accln * std::sqrt(std::max(0.0, 1.0 - pct*pct));
-                v_accln[i] = std::min(config_.v_max, std::sqrt(2*ax_avail*s[i-1] + v_i*v_i));
+                
+                double v_next = std::sqrt(2 * ax_avail * s[i-1] + v_i * v_i); // s[0] = length of segment from 0 to 1.  
+                v_accln[i] = std::min(v_next, v_corner[i]); 
             }
 
             // closed loop continuation 
@@ -99,13 +100,14 @@ namespace utils{
             double ay_used_wrap = std::min(std::abs(k[n-1]) * v_last * v_last, config_.ay_max);
             double pct_wrap = ay_used_wrap / config_.ay_max;
             double ax_avail_wrap = config_.ax_max_accln * std::sqrt(std::max(0.0, 1.0 - pct_wrap*pct_wrap));
-            // Use s[n-1] because it naturally represents the segment connecting index n-1 to index 0!
-            v_accln[0] = std::min(config_.v_max, std::sqrt(2*ax_avail_wrap*s[n-1] + v_last*v_last));
+            
+            // Cap the wrap-around too
+            double v_wrap_next = std::sqrt(2 * ax_avail_wrap * s[n-1] + v_last * v_last);
+            v_accln[0] = std::min(v_wrap_next, v_corner[0]);
         }
 
         // Braking profile
-        v_brake.assign(n, 0.0);
-        v_brake[n-1] = v_corner[n-1];
+        v_brake = v_corner; 
 
         for (int iter = 0; iter < 3; iter++) {
             for (int j = (int)n - 2; j >= 0; j--) {
@@ -113,18 +115,21 @@ namespace utils{
                 double ay_used = std::min(std::abs(k[j+1]) * v_j * v_j, config_.ay_max);
                 double pct = ay_used / config_.ay_max;
                 double ax_avail = std::max(0.0, config_.ax_max_brake * std::sqrt(std::max(0.0, 1.0 - pct*pct)));
-                v_brake[j] = std::min(config_.v_max, std::sqrt(2*ax_avail*s[j] + v_j*v_j));
+                
+                // Calculate the new speed, but cap it at the cornering limit
+                double v_prev = std::sqrt(2 * ax_avail * s[j] + v_j * v_j);
+                v_brake[j] = std::min(v_prev, v_corner[j]);
             }
 
             // Braking Profile Wrap Continuation
             double v_first = v_brake[0];
-            // Use the velocity at n-1 alongside the curvature at n-1
-            double ay_used_wrap = std::min(std::abs(k[n-1]) * v_brake[n-1] * v_brake[n-1], config_.ay_max);
+            double ay_used_wrap = std::min(std::abs(k[0]) * v_first * v_first, config_.ay_max); 
             double pct_wrap = ay_used_wrap / config_.ay_max;
             double ax_avail_wrap = std::max(0.0, config_.ax_max_brake * std::sqrt(std::max(0.0, 1.0 - pct_wrap*pct_wrap)));
 
-            // Retard from v_first back into v_brake[n-1]
-            v_brake[n-1] = std::min(config_.v_max, std::sqrt(2 * ax_avail_wrap * s[n-1] + v_first * v_first));
+            // Cap the wrap-around too
+            double v_wrap_prev = std::sqrt(2 * ax_avail_wrap * s[n-1] + v_first * v_first);
+            v_brake[n-1] = std::min(v_wrap_prev, v_corner[n-1]);
         }
         
         // Final profile
@@ -135,33 +140,45 @@ namespace utils{
             v_profile[x] = std::min({v_corner[x], v_accln[x], v_brake[x]});
         }
 
+        std::cout<<"Finished Compute smooth velocity"<<'\n'; 
+        
         return v_profile; 
     }
     
     // Used AI for plotting files 
     void saveProfileToCSV(const std::vector<double>& v_profile, 
-                        const std::vector<double>& v_accln, 
-                        const std::vector<double>& v_brake, 
-                        const std::vector<double>& v_corner,
-                        const std::string& filename) 
-    {
-        std::ofstream file(filename);
-        if (!file.is_open()) {
-            std::cerr << "Failed to open file for writing CSV!" << std::endl;
-            return;
-        }
+                            const std::vector<double>& v_accln, 
+                            const std::vector<double>& v_brake, 
+                            const std::vector<double>& v_corner,
+                            const std::string& filename) 
+        {
+            std::ofstream file(filename);
+            if (!file.is_open()) {
+                std::cerr << "Failed to open file for writing CSV!" << std::endl;
+                return;
+            }
 
-        // Header row with all channels
-        file << "Index,Velocity_Profile,Velocity_Accel,Velocity_Brake,Velocity_Corner\n"; 
-        
-        for (size_t i = 0; i < v_profile.size(); ++i) {
-            file << i << "," 
-                << v_profile[i] << "," 
-                << v_accln[i] << "," 
-                << v_brake[i] << "," 
-                << v_corner[i] << "\n";
+            // Header row with all channels
+            file << "Index,Velocity_Profile,Velocity_Accel,Velocity_Brake,Velocity_Corner\n"; 
+            
+            size_t n = v_profile.size();
+            for (size_t i = 0; i < n; ++i) {
+                file << i << "," 
+                    << v_profile[i] << "," 
+                    << v_accln[i] << "," 
+                    << v_brake[i] << "," 
+                    << v_corner[i] << "\n";
+            }
+            
+            // Append index 0 to the very end of the file 
+            // to force the plotter to draw the wrap-around connecting line.
+            file << n << "," 
+                << v_profile[0] << "," 
+                << v_accln[0] << "," 
+                << v_brake[0] << "," 
+                << v_corner[0] << "\n";
+
+            file.close();
         }
-        file.close();
-    }
 
 }
