@@ -10,7 +10,7 @@ def generate_launch_description():
     controller_node = Node(
         package= 'controller',
         executable= 'longitudinal_controller',
-        name = 'controller_node',
+        name = 'longitudinal_controller',
         output = 'screen',
         parameters= [config_file_path]
     )

@@ -52,6 +52,10 @@ class Controller : public rclcpp::Node{
         std::vector<double> v_corner;
         std::vector<double> v_profile;
         
+        // Velocity profile variables
+        std::vector<double> s; 
+        double track_length; 
+        
         // PID and Params variables
         PID pid_1; 
         float kp, ti, td, tr, n, beta, dt;

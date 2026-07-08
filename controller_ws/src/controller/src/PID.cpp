@@ -31,8 +31,18 @@ double PID::calculateOutput(const double current_meas, double setpoint){
     if(m_u<MIN_THROTTLE){
         m_u = MIN_THROTTLE; 
     }
+    
+    // PID integral division by 0 states check
+    double integral_step{}, tracking_step{}; 
+    
+    if(std::abs(m_ti)>1e-6){
+        integral_step =  (m_kp*m_dt*err)/ m_ti; 
+    }
 
-    m_i = m_i + (m_kp*m_dt*err)/ m_ti + m_dt*(m_u - m_v)/m_tr; 
+    if(std::abs(m_tr)>1e-6){
+        tracking_step = m_dt*(m_u - m_v)/m_tr; 
+    }
+    m_i = m_i + integral_step + tracking_step; 
 
     // Updates
     prev_meas = current_meas;

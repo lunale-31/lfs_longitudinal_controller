@@ -21,9 +21,6 @@ namespace utils{
     5) Use this smooth profile to track using PID, which will generate throttle commands. 
     */
 
-    /*
-    TODO first: Think about mapping the indices of spline progression along with the respective velocity. 
-    */
     struct VehicleParams{
         double   mass = 200.0;
         double   lf = 0.781;
@@ -63,6 +60,9 @@ namespace utils{
     std::vector<double> computeVelocity(const std::vector<double>& k, const VehicleParams& config_); 
     std::vector<double> computeDeltaS(const std::vector<geometry_msgs::msg::Point>& latest_track_center);
 
+    // Velocity profile calculation for control callback
+    std::vector<double> getCummulativeS(const std::vector<geometry_msgs::msg::Point>& latest_track_center); 
+
     // Smooth Velocity profile
     std::vector<double> computeSmoothVel(const std::vector<geometry_msgs::msg::Point>& latest_track_center, const VehicleParams& config_,
                                         double current_speed, std::vector<double>& v_corner, std::vector<double>& v_accln, std::vector<double>& v_brake);
@@ -77,4 +77,13 @@ namespace utils{
     // Read-only 
     // void getK() const; 
     // void getVelProfile() const;
+
+    /*TODO: 
+    1) Create a function getCummulativeS() which computes the cummulative arc length s (as of now, we have delta S which says
+    distance between point P0 and P1, P1 and P2... so on. But we need full arc length and points on the spline that represents the track points P0,P1...)
+    2) For every controller callback, take s and fmod it with track length to obtain the current progress in spline (even if it completes multiple laps).
+    3) Find the closest track point to that current progress
+    4) Use that point index to take v_profile[idx] for the current instant.
+    5) Better way is to linearly interpolate between 2 track points, instead of choosing 1 closest point as index. */
+
 }

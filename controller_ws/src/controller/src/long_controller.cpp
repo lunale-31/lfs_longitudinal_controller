@@ -70,7 +70,17 @@ void Controller::trackServiceRequest(){
                                     "velocity_profile.csv");
 
             RCLCPP_INFO(this->get_logger(), "CSV Saved");
+            
+            // Velocity setpoint calculation
+            this->s = utils::getCummulativeS(latest_track_center);
 
+            // Total loop length = distance to last point + distance from last point back to P0
+            double last_segment = std::hypot(
+                latest_track_center.front().x - latest_track_center.back().x,
+                latest_track_center.front().y - latest_track_center.back().y
+            );
+            this->track_length = s.back() + last_segment;
+                
             this->has_received_track = true;
         }); 
 
@@ -84,29 +94,67 @@ void Controller::controllerCallback(const lfs_msgs::msg::BikeState::SharedPtr ms
         return;
     }
 
-    /* msg->x_dot (to obtain states)
-    1) latest_track_center has the 98 track_center points as a vector from the service. (latest_track_center[0].x, y, z). 
-    2) Compute the track curvature (k).
-    3) Use the k to calculate maximum speed the car can safely drive around a corner (lateral accln is needed to stay on the curve, 
-    which is a centripetal accln) and driving on the straight line.
-    4) Modify the obtained profile due to k using accln and braking limits. 
-    5) Use this smooth profile to track using PID, which will generate throttle commands. 
-    */
-
     double current_speed = static_cast<double>(msg->x_dot);
+    double current_s = static_cast<double>(msg->s); 
 
-    // setpoint setting 
-    double setpoint = 1.0;
-                
+    // Setpoint generation 
+
+    double current_progress = std::fmod(current_s, track_length);  // Helps to give the spline progression even after multiple laps
+
+    // front, back is for values. begin and end gives iterators (memory pointers)
+    auto it = std::upper_bound(s.begin(), s.end(), current_progress); // Search the sorted container s (from [first element] to (last)) 
+    //and return an iterator pointing to the first element that is strictly greater than current_progress.
+
+    size_t idx_next = 0;
+    size_t idx_prev = 0;
+    // this idx basically gives the index of 0 to 98 points that is stored in cummulative S in utils
+
+    if (it == s.end()) { //
+        // progress between the very last point and the first point (P0)
+        idx_prev = s.size() - 1;
+        idx_next = 0;
+    } else if (it == s.begin()) {
+        // progress is exactly at or before 0.0
+        idx_prev = 0;
+        idx_next = 1;
+    } else {
+        // progress falls cleanly between two track points
+        idx_next = std::distance(s.begin(), it); // index distance (ex: 0 to 5 = 5 steps)
+        idx_prev = idx_next - 1;
+    } 
+
+    // Linear interpolation for smooth velocity profile
+    double s_prev = s[idx_prev];
+    double s_next;
+
+    if (idx_next == 0){
+        // after 1 lap 
+        s_next = track_length;
+    }
+    else{
+        s_next = s[idx_next];
+    }
+
+    double t = (current_progress - s_prev) / (s_next - s_prev); 
+
+    // v_profile vectors of prev and next indexes 
+    double v_prev = v_profile[idx_prev];
+    double v_next = v_profile[idx_next];
+
+    double target_velocity = v_prev + t*(v_next - v_prev);
+    
     // PID Controller
     double u; 
 
-    // Casting to double for PID calcs, the states are in float32 so. 
-    // u = pid_1.calculateOutput(static_cast<double>(current_speed), static_cast<double>(setpoint)); 
-    u = pid_1.calculateOutput(current_speed, setpoint); 
+    u = pid_1.calculateOutput(current_speed, target_velocity); 
 
     std_msgs::msg::Float64 throttle_msg; 
     throttle_msg.data = u; 
 
     throttle_publisher->publish(throttle_msg); 
+
+    // Debug
+    RCLCPP_INFO(this->get_logger(), 
+            "--- VERIFICATION --- Lap Progress: %.2fm | Match Index: [ %zu ] | Interp t: %.2f | Target V: %.2f m/s | Actual V: %.2f m/s", 
+            current_progress, idx_prev, t, target_velocity, current_speed);    
 }

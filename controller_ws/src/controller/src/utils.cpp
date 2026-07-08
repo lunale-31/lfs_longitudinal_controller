@@ -67,6 +67,18 @@ namespace utils{
         return s;
     }
 
+    std::vector<double> getCummulativeS(const std::vector<geometry_msgs::msg::Point>& latest_track_center){
+        std::vector<double> s_d = computeDeltaS(latest_track_center);
+
+        std::vector<double> s(latest_track_center.size()); 
+        s[0] = 0.0; // 1st point in latest_track_center should start from 0. 
+        for(size_t i = 1; i<latest_track_center.size(); i++){
+            s[i] = s[i - 1] + s_d[i - 1];
+        }
+
+        return s;
+    } 
+
     std::vector<double> computeSmoothVel(const std::vector<geometry_msgs::msg::Point>& latest_track_center, const VehicleParams& config_,
                                         double current_speed, std::vector<double>& v_corner, std::vector<double>& v_accln, std::vector<double>& v_brake){
         size_t n = latest_track_center.size();
