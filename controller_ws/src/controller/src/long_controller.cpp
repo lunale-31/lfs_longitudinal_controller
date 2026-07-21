@@ -1,14 +1,15 @@
 #include "long_controller.h"
-#include "PID.h"
-#include "utils.h"
 
 Controller::Controller() : rclcpp::Node("longitudinal_controller"){
 
     state_subscriber = this->create_subscription<lfs_msgs::msg::BikeState>("/current_state", 10, std::bind(&Controller::controllerCallback, this, std::placeholders::_1)); 
     throttle_publisher = this->create_publisher<std_msgs::msg::Float64>("/throttle_cmd", 10); 
 
+    control_debug_pub = this->create_publisher<lfs_msgs::msg::ControlDebug>("/control_debug", 10);
+    profile_debug_pub = this->create_publisher<lfs_msgs::msg::ProfileDebug>("/profile_debug", 10);
+
     track_client = this->create_client<track_srv::srv::ReturnTrack>("/return_track");  // Enter the service name correctly when you create a client.
-    
+
     RCLCPP_INFO(this->get_logger(), "Controller is active! waiting for simulation ticks..."); 
     
     loadParams();
@@ -55,32 +56,93 @@ void Controller::trackServiceRequest(){
     // [this] remembers the current Controller instance, called as capture clause. 
     track_client->async_send_request(request,
         [this](rclcpp::Client<track_srv::srv::ReturnTrack>::SharedFuture future) {
+            /* OBTAINING TRACK POINTS */
             auto response = future.get();
             
             // Handle the response data 
             this->latest_track_center = response->points; 
             RCLCPP_INFO(this->get_logger(), "Track received. Controller ready for live profiling.");
             
-            // Compute the static profile once, right after receiving the track
-            utils::VehicleParams config;
-            this->v_profile = utils::computeSmoothVel(this->latest_track_center, config, /*current_speed=*/0.0,
-                                                    this->v_corner, this->v_accln, this->v_brake);
+            /* SPLINE INTERPOLATION */
+            spline_control_points.clear();
+            spline_points_.clear();
+            spline_curvature_.clear();
 
-            utils::saveProfileToCSV(this->v_profile, this->v_accln, this->v_brake, this->v_corner,
-                                    "velocity_profile.csv");
+            // Fit Bspline to the obtained points
+            spline_control_points.reserve(latest_track_center.size());
 
-            RCLCPP_INFO(this->get_logger(), "CSV Saved");
+            // For each point in latest_track_center (:)
+            for(const auto& point : latest_track_center){
+                spline_control_points.push_back(Eigen::Vector2d(point.x, point.y));
+            }
+            spline_ = std::make_unique<LoopingUniformCubicBSpline<Eigen::Vector2d>>(spline_control_points);
+
+            // Get the sampled spline points via functions inside spline class
+            const double max_t = static_cast<double>(spline_->getMaxT()); 
+            constexpr double spline_sample_t = 0.1;
+            const std::size_t sample_count = static_cast<size_t>(std::ceil(max_t/spline_sample_t));
             
-            // Velocity setpoint calculation
-            this->s = utils::getCummulativeS(latest_track_center);
+            spline_points_.reserve(sample_count); 
+            spline_curvature_.reserve(sample_count);
+
+            for(size_t i = 0; i < sample_count; i++){
+                const double t = static_cast<double>(i) * spline_sample_t; 
+                if(t>=max_t){
+                    break;
+                }
+                const auto spline_data = spline_->getCurvature(t);  
+
+                const Eigen::Vector2d& position_s = spline_data.position; 
+                const Eigen::Vector2d& first_derivative = spline_data.tangent; 
+                const Eigen::Vector2d& second_derivative = spline_data.curvature; 
+
+                const double fd_squared = first_derivative.squaredNorm(); 
+
+                // Curvature (K) formula 
+                double curvature_k = 0.0;
+
+                if(fd_squared>1e-12){
+                    double numerator_k = (first_derivative.x() * second_derivative.y() - first_derivative.y() * second_derivative.x());
+                    double denominator_k = std::pow(fd_squared, 1.5);  
+                    curvature_k = numerator_k / denominator_k; 
+                }
+
+                spline_points_.push_back(position_s);
+                spline_curvature_.push_back(curvature_k); 
+            }
+
+            RCLCPP_INFO(
+                this->get_logger(),
+                "Generated %zu spline points and %zu curvature values. max_t=%.2f",
+                spline_points_.size(),
+                spline_curvature_.size(),
+                max_t
+            );
+
+            /* TARGET VELOCITY PROFILE CALCULATION */
+            // Compute the static profile once, right after receiving the track
+            this->v_profile = utils::computeSmoothVel(this->spline_points_, this->spline_curvature_, 
+                                                      this->config_, /*current_speed=*/0.0,
+                                                      this->v_corner, this->v_accln, this->v_brake);
+
+            // Cummulative S calculation
+            this->s = utils::getCumulativeS(spline_points_);
 
             // Total loop length = distance to last point + distance from last point back to P0
-            double last_segment = std::hypot(
-                latest_track_center.front().x - latest_track_center.back().x,
-                latest_track_center.front().y - latest_track_center.back().y
+            const std::vector<double> delta_s = utils::computeDeltaS(this->spline_points_);
+            this->track_length = this->s.back() + delta_s.back();
+
+            utils::saveProfileAnalysisToCSV(
+                this->spline_points_,
+                this->spline_curvature_,
+                this->config_,
+                this->v_profile,
+                this->v_accln,
+                this->v_brake,
+                this->v_corner,
+                "Bspline_velocity_profile_analysis.csv"
             );
-            this->track_length = s.back() + last_segment;
-                
+
             this->has_received_track = true;
         }); 
 
@@ -96,9 +158,9 @@ void Controller::controllerCallback(const lfs_msgs::msg::BikeState::SharedPtr ms
 
     double current_speed = static_cast<double>(msg->x_dot);
     double current_s = static_cast<double>(msg->s); 
+    double current_pf = static_cast<double>(msg->performance_fraction);
 
-    // Setpoint generation 
-
+    /* Setpoint generation */
     double current_progress = std::fmod(current_s, track_length);  // Helps to give the spline progression even after multiple laps
 
     // front, back is for values. begin and end gives iterators (memory pointers)
@@ -142,19 +204,42 @@ void Controller::controllerCallback(const lfs_msgs::msg::BikeState::SharedPtr ms
     double v_next = v_profile[idx_next];
 
     double target_velocity = v_prev + t*(v_next - v_prev);
+
+    // target acceleration for feedforward (a = v2 - u2 / 2s, assuming constant acceleration between every time instant)
+    double s_del = s_next - s_prev; 
+    double target_acceleration = (v_next * v_next - v_prev * v_prev) / (2 * s_del);
     
+    double u_ff = utils::computeFeedforward(target_acceleration, target_velocity, config_); 
+
     // PID Controller
     double u; 
 
-    u = pid_1.calculateOutput(current_speed, target_velocity); 
+    u = pid_1.calculateOutput(current_speed, target_velocity, u_ff); 
 
     std_msgs::msg::Float64 throttle_msg; 
     throttle_msg.data = u; 
 
     throttle_publisher->publish(throttle_msg); 
+    
+    double u_pid = pid_1.getPIDoutput(); 
+    double u_unsaturated = pid_1.getUnsaturatedOutput();
+    
+    // Controller debug msg 
+    lfs_msgs::msg::ControlDebug control_debug_msg; 
 
-    // Debug
+    control_debug_msg.header.stamp = this->get_clock()->now();
+    control_debug_msg.u = u; 
+    control_debug_msg.u_ff = u_ff;  
+    control_debug_msg.u_pid = u_pid;  
+    control_debug_msg.u_unsaturated = u_unsaturated;  
+    control_debug_msg.v_target = target_velocity;  
+    control_debug_msg.xdot = current_speed; 
+    control_debug_msg.performance_fraction = current_pf; 
+
+    control_debug_pub->publish(control_debug_msg); 
+
+    // Debug logger
     RCLCPP_INFO(this->get_logger(), 
-            "--- VERIFICATION --- Lap Progress: %.2fm | Match Index: [ %zu ] | Interp t: %.2f | Target V: %.2f m/s | Actual V: %.2f m/s", 
-            current_progress, idx_prev, t, target_velocity, current_speed);    
+            "--- VERIFICATION --- Lap Progress: %.2fm | Match Index: [ %zu ] | Interp t: %.2f | Target V: %.2f m/s | Actual V: %.2f m/s | Feedforward: %.2f ", 
+            current_progress, idx_prev, t, target_velocity, current_speed, u_ff);    
 }

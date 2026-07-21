@@ -6,6 +6,7 @@ RUN apt-get update && apt-get install -y \
     python3-colcon-common-extensions \
     ros-humble-foxglove-bridge \
     ros-humble-plotjuggler-ros \
+    ros-humble-rosbag2-storage-mcap \
     git \
     && rm -rf /var/lib/apt/lists/*
 

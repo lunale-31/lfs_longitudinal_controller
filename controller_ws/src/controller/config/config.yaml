@@ -1,10 +1,10 @@
 longitudinal_controller:
   ros__parameters:
     # PID Params
-    kp: 0.05
-    ti: 0.0
+    kp: 0.3
+    ti: 1.0
     td: 0.0
-    tr: 0.05
+    tr: 0.2
     n: 10.0
     beta: 1.0
 

@@ -9,7 +9,7 @@ PID::PID(float kp, float ti, float td, float tr, float n, float beta, float dt):
 
 PID::PID(): m_kp(0), m_ti(0), m_td(0), m_tr(0), m_n(0), m_beta(0), m_dt(0) {}
 
-double PID::calculateOutput(const double current_meas, double setpoint){
+double PID::calculateOutput(const double current_meas, double setpoint, double u_ff){
     // Error
     err = setpoint - current_meas; 
     
@@ -20,7 +20,8 @@ double PID::calculateOutput(const double current_meas, double setpoint){
     m_d = ad*prev_der - bd*(current_meas - prev_meas);   
 
     // PID output 
-    m_v = m_p + m_d + m_i; 
+    m_pid = m_p + m_d + m_i;  
+    m_v = m_p + m_d + m_i + u_ff; 
 
     // Integral back-calculation 
     m_u = m_v;
@@ -55,4 +56,12 @@ void PID::resetController(){
     m_i = 0.0;
     m_d = 0.0;
     prev_meas = 0.0; 
+}
+
+double PID::getUnsaturatedOutput() const{
+    return m_v; 
+}
+
+double PID::getPIDoutput() const{
+    return m_pid; 
 }

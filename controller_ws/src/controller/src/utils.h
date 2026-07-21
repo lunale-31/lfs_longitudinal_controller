@@ -6,6 +6,11 @@
 #include <iostream> 
 #include <cmath> 
 #include <fstream>
+#include <sstream>
+#include <iomanip>
+#include <string>
+#include <vector>
+#include <algorithm>
 
 // Messages required
 #include "geometry_msgs/msg/point.hpp"
@@ -39,41 +44,72 @@ namespace utils{
         
         // MAX ACCELERATION AND BRAKING
         // MAX ACCELERATION ON CORNERING
+        // Considering both actuator and tire limits 
         double ax_max_accln;  
         double ay_max;
         double ax_max_brake;
 
+        double ax_max_actuator_accln;
+        double ax_max_actuator_brake; 
+
         // MAX VELOCITY
-        double v_max = 32.16; 
+        double v_max = 32.16; // Theoretical maximum 
+        // double v_max = 15.0; 
 
         VehicleParams(){
             double F_drive = max_drive_torque / wheel_radius;
+            double F_brake = max_brake_torque / wheel_radius;
             double F_rr = mass * g * Crr;
-            ax_max_accln = (F_drive - F_rr) / mass; // Not considering drag as the ax is maximum only when the velocity = 0 as the whole term decreases when v increases. 
+
+            // Not considering drag as the ax is maximum only when the velocity = 0 as the whole term decreases when v increases. 
+            ax_max_actuator_accln = (F_drive - F_rr) / mass; 
+            ax_max_accln = std::min(ax_max_actuator_accln, mu_long*g);
+
             ay_max = mu_lat*g;
-            ax_max_brake = mu_long*g;
+            
+            ax_max_actuator_brake = (F_brake + F_rr) / mass; 
+            ax_max_brake = std::min(ax_max_actuator_brake, mu_long*g);
         }
     };
 
+    // FAHH helper
+    std::vector<double> computeSmoothVelFromCSV(
+        const std::string& input_filename,
+        const std::string& output_filename,
+        const VehicleParams& config_,
+        std::vector<double>& cumulative_s,
+        std::vector<double>& spline_curvature,
+        std::vector<double>& v_corner,
+        std::vector<double>& v_accln,
+        std::vector<double>& v_brake
+    );
+
     // Velocity profile calculation
     std::vector<double> computeCurvature(const std::vector<geometry_msgs::msg::Point>& latest_track_center, const VehicleParams& config_);
-    std::vector<double> computeVelocity(const std::vector<double>& k, const VehicleParams& config_); 
-    std::vector<double> computeDeltaS(const std::vector<geometry_msgs::msg::Point>& latest_track_center);
+    std::vector<double> computeCornerVelocity(const std::vector<double>& k, const VehicleParams& config_); 
+    std::vector<double> computeDeltaS(const std::vector<Eigen::Vector2d>& spline_points_);
 
     // Velocity profile calculation for control callback
-    std::vector<double> getCummulativeS(const std::vector<geometry_msgs::msg::Point>& latest_track_center); 
+    std::vector<double> getCumulativeS(const std::vector<Eigen::Vector2d>& spline_points_); 
 
     // Smooth Velocity profile
-    std::vector<double> computeSmoothVel(const std::vector<geometry_msgs::msg::Point>& latest_track_center, const VehicleParams& config_,
-                                        double current_speed, std::vector<double>& v_corner, std::vector<double>& v_accln, std::vector<double>& v_brake);
-
+    std::vector<double> computeSmoothVel(const std::vector<Eigen::Vector2d>& spline_points_, const std::vector<double>& spline_curvature_, 
+                                        const VehicleParams& config_, double current_speed, 
+                                        std::vector<double>& v_corner, std::vector<double>& v_accln, std::vector<double>& v_brake);
+    
+    // Feedforward computation
+    double computeFeedforward(double target_acceleration, double target_velocity, const VehicleParams& config_); 
+    
     // CSV save
-
-    void saveProfileToCSV(const std::vector<double>& v_profile, 
-                        const std::vector<double>& v_accln, 
-                        const std::vector<double>& v_brake, 
-                        const std::vector<double>& v_corner,
-                        const std::string& filename); 
+    void saveProfileAnalysisToCSV(
+        const std::vector<Eigen::Vector2d>& spline_points,
+        const std::vector<double>& spline_curvature,
+        const VehicleParams& config_,
+        const std::vector<double>& v_profile,
+        const std::vector<double>& v_accln,
+        const std::vector<double>& v_brake,
+        const std::vector<double>& v_corner,
+        const std::string& filename); 
     // Read-only 
     // void getK() const; 
     // void getVelProfile() const;

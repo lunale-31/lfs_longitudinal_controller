@@ -37,6 +37,12 @@ add_executable(longitudinal_controller
   src/utils.cpp
 )
 
+target_include_directories(longitudinal_controller PRIVATE
+  ${CMAKE_CURRENT_SOURCE_DIR}/src
+  ${CMAKE_CURRENT_SOURCE_DIR}/include
+  ${CMAKE_CURRENT_SOURCE_DIR}/../
+)
+
 target_link_libraries(longitudinal_controller
   Eigen3::Eigen   
 )

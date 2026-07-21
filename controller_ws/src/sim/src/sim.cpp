@@ -18,6 +18,9 @@
 #include "lfs_msgs/msg/bike_state.hpp"
 #include "bike_model.hpp"
 
+// FAHH
+#include "spline_library/splines/uniform_cubic_bspline.h"
+
 class SimNode : public rclcpp::Node
 {
 public:
@@ -25,17 +28,31 @@ public:
     {
         bike_model_ = BikeModel(dt_);
 
-        create_client_and_get_track_points();
-
+        // create_client_and_get_track_points();
+        
+        // Call the service only once
         if (!create_client_and_get_track_points()) {
-            RCLCPP_FATAL(this->get_logger(), "Failed to retrieve track points, aborting node construction");
-            throw std::runtime_error("Failed to retrieve track points");
+            RCLCPP_FATAL(
+                this->get_logger(),
+                "Failed to retrieve track points, aborting node construction"
+            );
+
+            throw std::runtime_error(
+                "Failed to retrieve track points"
+            );
         }
+        
+        // if (!create_client_and_get_track_points()) {
+        //     RCLCPP_FATAL(this->get_logger(), "Failed to retrieve track points, aborting node construction");
+        //     throw std::runtime_error("Failed to retrieve track points");
+        // }
+
         create_spline_from_points();
 
         // Initialize state publisher
         state_publisher_ = this->create_publisher<lfs_msgs::msg::BikeState>("current_state", 10);
         vis_publisher_ = this->create_publisher<visualization_msgs::msg::Marker>("/visualize_pose", 10);
+        curvature_publisher_ = this->create_publisher<std_msgs::msg::Float64>("/track_curvature",10); 
 
         // Initialize subscriber to throttle commands
         throttle_subscriber_ = this->create_subscription<std_msgs::msg::Float64>("throttle_cmd", 10,
@@ -54,16 +71,42 @@ public:
 
     void update_state()
     {
+        // Compute spline curvature once at the current vehicle position
+        double current_curvature =
+            track_curvature_at_current_position();
+
+        // Update bike model once
+        bike_model_.update_state(current_curvature);
+
+        // Publish current vehicle state
+        auto state_msg = lfs_msgs::msg::BikeState();
+
+        state_msg.x_dot =
+            bike_model_.get_x_dot();
+
+        state_msg.s =
+            bike_model_.get_s();
+
+        state_msg.performance_fraction =
+            bike_model_.get_performance_fraction();
+
+        state_publisher_->publish(state_msg);
+
+        // Publish spline curvature
+        std_msgs::msg::Float64 curvature_msg;
+        curvature_msg.data = current_curvature;
+        curvature_publisher_->publish(curvature_msg);
+
         // Update the bike model state based on the current throttle and track
 
-        bike_model_.update_state(track_curvature_at_current_position());
+        // bike_model_.update_state(track_curvature_at_current_position());
 
-        // Publish the current state
-        auto state_msg = lfs_msgs::msg::BikeState();
-        state_msg.x_dot = bike_model_.get_x_dot();
-        state_msg.s = bike_model_.get_s();
-        state_msg.performance_fraction = bike_model_.get_performance_fraction();
-        state_publisher_->publish(state_msg);
+        // // Publish the current state
+        // auto state_msg = lfs_msgs::msg::BikeState();
+        // state_msg.x_dot = bike_model_.get_x_dot();
+        // state_msg.s = bike_model_.get_s();
+        // state_msg.performance_fraction = bike_model_.get_performance_fraction();
+        // state_publisher_->publish(state_msg);
 
 		visualization_msgs::msg::Marker pose;
 		pose.type = 0;
@@ -175,17 +218,19 @@ public:
     {
         // Create a spline from the retrieved track points
         // Use the spline_library to create a uniform cubic spline
-        spline_ = std::make_unique<LoopingUniformCRSpline<Eigen::Vector2d>>(track_points_);
+        spline_ = std::make_unique<LoopingUniformCubicBSpline<Eigen::Vector2d>>(track_points_);
     }
 
 private:
     // Declare member variables for publishers, subscribers, and timers
     rclcpp::Client<track_srv::srv::ReturnTrack>::SharedPtr client_;
     std::vector<Eigen::Vector2d> track_points_;
-    std::unique_ptr<LoopingUniformCRSpline<Eigen::Vector2d>> spline_;
+    std::unique_ptr<LoopingUniformCubicBSpline<Eigen::Vector2d>> spline_;
 
     rclcpp::Publisher<lfs_msgs::msg::BikeState>::SharedPtr state_publisher_;
     rclcpp::Publisher<visualization_msgs::msg::Marker>::SharedPtr vis_publisher_;
+    rclcpp::Publisher<std_msgs::msg::Float64>::SharedPtr curvature_publisher_;
+
     rclcpp::Subscription<std_msgs::msg::Float64>::SharedPtr throttle_subscriber_;
     rclcpp::TimerBase::SharedPtr state_timer_;
 
