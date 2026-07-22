@@ -203,12 +203,15 @@ void Controller::controllerCallback(const lfs_msgs::msg::BikeState::SharedPtr ms
     double v_prev = v_profile[idx_prev];
     double v_next = v_profile[idx_next];
 
-    double target_velocity = v_prev + t*(v_next - v_prev);
-
     // target acceleration for feedforward (a = v2 - u2 / 2s, assuming constant acceleration between every time instant)
     double s_del = s_next - s_prev; 
     double target_acceleration = (v_next * v_next - v_prev * v_prev) / (2 * s_del);
     
+    // target velocity for pid
+    double s_local = current_progress - s_prev;
+
+    double target_velocity = std::sqrt(std::max(0.0, v_prev*v_prev + 2.0*target_acceleration*s_local));
+
     double u_ff = utils::computeFeedforward(target_acceleration, target_velocity, config_); 
 
     // PID Controller
@@ -224,6 +227,10 @@ void Controller::controllerCallback(const lfs_msgs::msg::BikeState::SharedPtr ms
     double u_pid = pid_1.getPIDoutput(); 
     double u_unsaturated = pid_1.getUnsaturatedOutput();
     
+    double u_p = pid_1.getPoutput();
+    double u_i = pid_1.getIoutput();
+    double u_d = pid_1.getDoutput();
+
     // Controller debug msg 
     lfs_msgs::msg::ControlDebug control_debug_msg; 
 
@@ -231,9 +238,16 @@ void Controller::controllerCallback(const lfs_msgs::msg::BikeState::SharedPtr ms
     control_debug_msg.u = u; 
     control_debug_msg.u_ff = u_ff;  
     control_debug_msg.u_pid = u_pid;  
-    control_debug_msg.u_unsaturated = u_unsaturated;  
+    control_debug_msg.u_unsaturated = u_unsaturated;
+    
+    control_debug_msg.u_p = u_p; 
+    control_debug_msg.u_i = u_i; 
+    control_debug_msg.u_d = u_d; 
+
     control_debug_msg.v_target = target_velocity;  
     control_debug_msg.xdot = current_speed; 
+    control_debug_msg.a_target = target_acceleration; 
+    
     control_debug_msg.performance_fraction = current_pf; 
 
     control_debug_pub->publish(control_debug_msg); 

@@ -28,4 +28,7 @@ class PID{
         // Read only functions
         double getUnsaturatedOutput() const; 
         double getPIDoutput() const; 
+        double getPoutput() const;
+        double getIoutput() const;
+        double getDoutput() const; 
 };

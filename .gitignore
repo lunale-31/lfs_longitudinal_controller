@@ -10,3 +10,5 @@ log/
 # OS files
 .DS_Store
 *.pyc
+
+/formula_student_code.tar.gz

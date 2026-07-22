@@ -65,3 +65,15 @@ double PID::getUnsaturatedOutput() const{
 double PID::getPIDoutput() const{
     return m_pid; 
 }
+
+double PID::getPoutput() const{
+    return m_p; 
+}
+
+double PID::getIoutput() const{
+    return m_i; 
+}
+
+double PID::getDoutput() const{
+    return m_d; 
+}

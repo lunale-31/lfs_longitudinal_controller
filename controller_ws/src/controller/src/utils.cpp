@@ -99,10 +99,23 @@ namespace utils{
 
         for (int iter = 0; iter < 3; iter++) {
             for (size_t i = 1; i < n; i++) { // i = 1
-                double v_i = v_accln[i-1]; // 0 
+                double v_i = v_accln[i-1]; // 0
+
+                double F_drive_max = config_.max_drive_torque / config_.wheel_radius;
+                double F_roll = config_.Crr * config_.mass * config_.g;
+                double F_drag = 0.5 * config_.rho_air * config_.CdA * v_i * v_i;
+                double ax_max_actuator = std::max(0.0, (F_drive_max - F_roll - F_drag)/config_.mass); 
+
+                double ax_max_tire = config_.mu_long * config_.g;
+                
                 double ay_used = std::min(std::abs(k[i-1]) * v_i * v_i, config_.ay_max); // k[0] * v[0] * v[0], move from i-1 to i
-                double pct = ay_used / config_.ay_max; 
-                double ax_avail = config_.ax_max_accln * std::sqrt(std::max(0.0, 1.0 - pct*pct));
+                double pct = std::clamp(ay_used / config_.ay_max, 0.0, 1.0);
+                double ellipse = std::sqrt(std::max(0.0, 1.0 - pct*pct)); 
+
+                double ax_max_actuator_avail = ax_max_actuator *  ellipse;
+                double ax_max_tire_avail = ax_max_tire *  ellipse;
+
+                double ax_avail = std::min(ax_max_actuator_avail, ax_max_tire_avail);
                 
                 double v_next = std::sqrt(2 * ax_avail * s[i-1] + v_i * v_i); // s[0] = length of segment from 0 to 1.  
                 v_accln[i] = std::min(v_next, v_corner[i]); 
@@ -111,8 +124,20 @@ namespace utils{
             // closed loop continuation 
             double v_last = v_accln[n-1];
             double ay_used_wrap = std::min(std::abs(k[n-1]) * v_last * v_last, config_.ay_max);
-            double pct_wrap = ay_used_wrap / config_.ay_max;
-            double ax_avail_wrap = config_.ax_max_accln * std::sqrt(std::max(0.0, 1.0 - pct_wrap*pct_wrap));
+            double pct_wrap = std::clamp(ay_used_wrap / config_.ay_max, 0.0, 1.0);
+            double ellipse_wrap = std::sqrt(std::max(0.0, 1.0 - pct_wrap*pct_wrap)); 
+
+            double Fl_drive_max = config_.max_drive_torque / config_.wheel_radius;
+            double Fl_roll = config_.Crr * config_.mass * config_.g;
+            double Fl_drag = 0.5 * config_.rho_air * config_.CdA * v_last * v_last;
+            double ax_max_actuator_last = std::max(0.0, (Fl_drive_max - Fl_roll - Fl_drag)/config_.mass); 
+            
+            double ax_max_tire = config_.mu_long * config_.g;
+
+            double ax_max_actuator_avail = ax_max_actuator_last *  ellipse_wrap;
+            double ax_max_tire_avail = ax_max_tire * ellipse_wrap;
+
+            double ax_avail_wrap = std::min(ax_max_actuator_avail, ax_max_tire_avail);
             
             // Cap the wrap-around too
             double v_wrap_next = std::sqrt(2 * ax_avail_wrap * s[n-1] + v_last * v_last);
@@ -126,8 +151,20 @@ namespace utils{
             for (int j = (int)n - 2; j >= 0; j--) {
                 double v_j = v_brake[j+1];
                 double ay_used = std::min(std::abs(k[j+1]) * v_j * v_j, config_.ay_max);
-                double pct = ay_used / config_.ay_max;
-                double ax_avail = std::max(0.0, config_.ax_max_brake * std::sqrt(std::max(0.0, 1.0 - pct*pct)));
+                double pct = std::clamp(ay_used / config_.ay_max, 0.0, 1.0);
+                double ellipse = std::sqrt(std::max(0.0, 1.0 - pct*pct));
+
+                double F_brake_max = config_.max_brake_torque / config_.wheel_radius;
+                double F_brake_roll = config_.Crr * config_.mass * config_.g;
+                double F_brake_drag = 0.5 * config_.rho_air * config_.CdA * v_j * v_j;
+                double ax_max_actuator_brake = std::max(0.0, (F_brake_max + F_brake_roll + F_brake_drag)/config_.mass); 
+                
+                double ax_max_tire = config_.mu_long * config_.g; 
+
+                double ax_max_actuator_brake_avail = ax_max_actuator_brake * ellipse; 
+                double ax_max_tire_avail = ax_max_tire * ellipse; 
+                
+                double ax_avail = std::min(ax_max_actuator_brake_avail, ax_max_tire_avail);
                 
                 // Calculate the new speed, but cap it at the cornering limit
                 double v_prev = std::sqrt(2 * ax_avail * s[j] + v_j * v_j);
@@ -137,8 +174,20 @@ namespace utils{
             // Braking Profile Wrap Continuation
             double v_first = v_brake[0];
             double ay_used_wrap = std::min(std::abs(k[0]) * v_first * v_first, config_.ay_max); 
-            double pct_wrap = ay_used_wrap / config_.ay_max;
-            double ax_avail_wrap = std::max(0.0, config_.ax_max_brake * std::sqrt(std::max(0.0, 1.0 - pct_wrap*pct_wrap)));
+            double pct_wrap = std::clamp(ay_used_wrap / config_.ay_max, 0.0, 1.0);
+            double ellipse_wrap = std::sqrt(std::max(0.0, 1.0 - pct_wrap*pct_wrap));
+
+            double F_brake_max_wrap = config_.max_brake_torque / config_.wheel_radius;
+            double F_brake_roll_wrap = config_.Crr * config_.mass * config_.g;
+            double F_brake_drag_wrap = 0.5 * config_.rho_air * config_.CdA * v_first * v_first;
+            double ax_max_actuator_brake_wrap = std::max(0.0, (F_brake_max_wrap + F_brake_roll_wrap + F_brake_drag_wrap)/config_.mass); 
+            
+            double ax_max_tire = config_.mu_long * config_.g; 
+
+            double ax_max_actuator_brake_avail = ax_max_actuator_brake_wrap * ellipse_wrap; 
+            double ax_max_tire_avail = ax_max_tire * ellipse_wrap; 
+            
+            double ax_avail_wrap = std::min(ax_max_actuator_brake_avail, ax_max_tire_avail);
 
             // Cap the wrap-around too
             double v_wrap_prev = std::sqrt(2 * ax_avail_wrap * s[n-1] + v_first * v_first);
